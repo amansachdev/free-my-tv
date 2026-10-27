@@ -28,12 +28,13 @@ final class RemoteKeys {
      * The key codes are the brand's own: on other brands they can be other buttons, so nothing here runs there.
      * Vestel builds TVs sold under other brands (F&U...), so BRAND varies: check the maker too.
      */
-    static final boolean TCL = is("TCL"), VESTEL = is("Vestel"), KTC = is("KTC"), SONY = is("Sony"), FORMOVIE = is("Formovie");
+    static final boolean TCL = is("TCL"), VESTEL = is("Vestel"), KTC = is("KTC"), SONY = is("Sony"),
+            FORMOVIE = is("Formovie"), SPPL = is("SPPL") || is("Realtek");
     /** Brands whose Netflix button is STEM_1, a global key (MediaTek): only that button is ours. */
     static final boolean STEM_NETFLIX = VESTEL || FORMOVIE;
 
     static boolean supported() {
-        return TCL || STEM_NETFLIX || KTC || SONY;
+        return TCL || STEM_NETFLIX || KTC || SONY || SPPL;
     }
 
     private static boolean is(String maker) {
@@ -43,16 +44,35 @@ final class RemoteKeys {
     /** Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed). */
     static boolean onKey(Context c, KeyEvent e) {
         if (!supported()) return false;
-        // BUTTON_3 is also a game controller's button: keys from a gamepad or a joystick are left alone.
+        // BUTTON_3 is also a game controller's button: keys from a gamepad are left alone.
+        // Note: Realtek/SPPL Bluetooth voice remotes (TV RCU) report SOURCE_JOYSTICK alongside SOURCE_KEYBOARD | SOURCE_DPAD,
+        // so only ignore SOURCE_JOYSTICK when SOURCE_KEYBOARD is absent.
         int source = e.getSource();
         if ((source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
-                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return false;
+                || ((source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                    && (source & InputDevice.SOURCE_KEYBOARD) == 0)) return false;
         int keyCode = e.getKeyCode() == KEY_YOUTUBE_TCL ? Prefs.KEY_YOUTUBE : e.getKeyCode();
+        if (SPPL) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_BUTTON_4: keyCode = Prefs.KEY_NETFLIX; break;
+                case KeyEvent.KEYCODE_BUTTON_3: keyCode = Prefs.KEY_YOUTUBE; break;
+                case KeyEvent.KEYCODE_BUTTON_8:
+                case KeyEvent.KEYCODE_BUTTON_2: keyCode = Prefs.KEY_PRIME; break;
+                case KeyEvent.KEYCODE_BUTTON_6: keyCode = Prefs.KEY_TCL_CHANNEL; break;
+            }
+        }
         // Sony sends BUTTON_9 for five app buttons (BUTTON_4 for Netflix, BUTTON_8 for Google Play): only the scan code
         // tells them apart.
         if (SONY && (keyCode == KeyEvent.KEYCODE_BUTTON_4 || keyCode == KeyEvent.KEYCODE_BUTTON_8
                 || keyCode == KeyEvent.KEYCODE_BUTTON_9)) {
             keyCode = Prefs.SONY_KEY + e.getScanCode();
+        }
+        if (SPPL && e.getKeyCode() == KeyEvent.KEYCODE_BUTTON_16) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+                Intent intent = launchIntent(c.getPackageManager(), "com.google.android.youtube.tvmusic");
+                if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }
+            return true;
         }
         boolean ours = false;
         for (int key : Prefs.KEYS) ours |= key == keyCode;

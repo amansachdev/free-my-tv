@@ -146,7 +146,7 @@ final class Prefs {
             case KEY_NETFLIX: case KEY_STEM_NETFLIX: return "com.netflix.ninja";
             case KEY_YOUTUBE: return "com.google.android.youtube.tv";
             case KEY_PRIME: return "com.amazon.amazonvideo.livingroom";
-            case KEY_TCL_CHANNEL: return "";
+            case KEY_TCL_CHANNEL: return RemoteKeys.SPPL ? "in.startv.hotstar" : "";
             default: return "";
         }
     }

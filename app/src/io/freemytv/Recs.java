@@ -45,7 +45,7 @@ final class Recs {
     static final class Pick {
         int id;
         String kind;            // "movie" or "tv"
-        String title, backdrop, meta = "", app, pkg;
+        String title, backdrop, meta = "", overview = "", rating = "", year = "", app, pkg;
         String link;            // opens the title in its app (looked up with Watchmode), or null: the app's home
         boolean detailed;
     }
@@ -59,7 +59,7 @@ final class Recs {
     private static final int ANIMATION = 16;
     private static final long LIST_EVERY = 6 * 3600_000L;
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
-    private static final int CACHE_VERSION = 3;
+    private static final int CACHE_VERSION = 4;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
     /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
     private static final String[][] SERVICES = {
@@ -184,9 +184,9 @@ final class Recs {
     /** This hour's 3, movies only ("movie") or shows only ("tv"); null = both (the home screen tabs). */
     List<Pick> now(String kind) {
         List<Pick> list = new ArrayList<>();
-        if (!hasKey(context)) return list;    // no TMDB key: no recommendations
+        List<Pick> source = picks.isEmpty() ? curatedPicks() : picks;
         Map<String, Boolean> have = new HashMap<>();   // one look per app, not per title (this runs every 15 s)
-        for (Pick p : picks) {
+        for (Pick p : source) {
             if ((kind == null || kind.equals(p.kind))
                     && (!p.detailed || (p.pkg != null && have.computeIfAbsent(p.pkg, this::installed)))) list.add(p);   // app missing: skip
         }
@@ -200,6 +200,49 @@ final class Recs {
             if (seen.add(franchise(p.title))) out.add(p);
         }
         return out;
+    }
+
+    private static List<Pick> curatedCache;
+
+    /** Built-in curated picks (using public TMDB CDN backdrops) when no personal TMDB API key is configured. */
+    private static synchronized List<Pick> curatedPicks() {
+        if (curatedCache != null) return curatedCache;
+        String[][] raw = {
+            {"693134", "movie", "Dune: Part Two", "/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg", "8.3", "2024", "Sci-Fi & Adventure  ·  2h 46m  ·  JioHotstar", "hotstar", "in.startv.hotstar",
+                "Follow the mythic journey of Paul Atreides as he unites with Chani and the Fremen while on a path of revenge against the conspirators who destroyed his family."},
+            {"66732", "tv", "Stranger Things", "/56v2KjBlU4XaOv9rVYEQypROD7P.jpg", "8.6", "2016", "Series  ·  Sci-Fi & Mystery  ·  4 seasons  ·  Netflix", "netflix", "com.netflix.ninja",
+                "When a young boy vanishes, a small town uncovers a mystery involving secret experiments, terrifying supernatural forces, and one strange little girl."},
+            {"872585", "movie", "Oppenheimer", "/rLb2cwF3Pazuxaj0sRXQ037tGI1.jpg", "8.1", "2023", "Drama & History  ·  3h 0m  ·  JioHotstar", "hotstar", "in.startv.hotstar",
+                "The story of J. Robert Oppenheimer's role in the development of the atomic bomb during World War II and the dramatic fallout that followed."},
+            {"76479", "tv", "The Boys", "/70YdbMELM4b8x8VXjlubymb2bQ0.jpg", "8.5", "2019", "Series  ·  Action & Sci-Fi  ·  4 seasons  ·  Prime Video", "prime", "com.amazon.amazonvideo.livingroom",
+                "A group of vigilantes known informally as The Boys set out to take down corrupt superheroes with no more than blue-collar grit and a willingness to fight dirty."},
+            {"278", "movie", "The Shawshank Redemption", "/zfbjgQE1uSd9wiPTX4VzsLi0rGG.jpg", "8.7", "1994", "Drama  ·  2h 22m  ·  Prime Video", "prime", "com.amazon.amazonvideo.livingroom",
+                "Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison."},
+            {"1396", "tv", "Breaking Bad", "/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg", "8.9", "2008", "Series  ·  Crime & Drama  ·  5 seasons  ·  Netflix", "netflix", "com.netflix.ninja",
+                "Walter White, a New Mexico chemistry teacher, is diagnosed with Stage III cancer and given a prognosis of only two years left to live, entering the dangerous world of crime."},
+            {"129", "movie", "Spirited Away", "/mSDsSDwaP3E7dEfUPWy4J0djt4O.jpg", "8.5", "2001", "Animation & Fantasy  ·  2h 5m  ·  Netflix", "netflix", "com.netflix.ninja",
+                "A young girl, Chihiro, becomes trapped in a strange new world of spirits. When her parents undergo a mysterious transformation, she must call upon the courage she never knew she had."},
+            {"100088", "tv", "The Last of Us", "/uDgy6hyPd82kOHh6I95FLtLnj6p.jpg", "8.6", "2023", "Series  ·  Action & Drama  ·  2 seasons  ·  JioHotstar", "hotstar", "in.startv.hotstar",
+                "Twenty years after modern civilization has been destroyed, Joel, a hardened survivor, is hired to smuggle Ellie, a 14-year-old girl, out of an oppressive quarantine zone."}
+        };
+        List<Pick> list = new ArrayList<>();
+        for (String[] r : raw) {
+            Pick p = new Pick();
+            p.id = Integer.parseInt(r[0]);
+            p.kind = r[1];
+            p.title = r[2];
+            p.backdrop = r[3];
+            p.rating = r[4];
+            p.year = r[5];
+            p.meta = r[6];
+            p.app = r[7];
+            p.pkg = r[8];
+            p.overview = r[9];
+            p.detailed = true;
+            list.add(p);
+        }
+        curatedCache = list;
+        return list;
     }
 
     /** "Law & Order: Special Victims Unit" → "law & order" (what comes before ":" or " - "). */
@@ -468,6 +511,11 @@ final class Recs {
         p.kind = kind;
         p.title = o.optString(kind.equals("movie") ? "title" : "name");
         p.backdrop = backdrop;
+        p.overview = o.optString("overview", "");
+        double vote = o.optDouble("vote_average", 0);
+        if (vote > 0) p.rating = String.format(Locale.US, "%.1f", vote);
+        String date = o.optString(kind.equals("movie") ? "release_date" : "first_air_date", "");
+        if (date.length() >= 4) p.year = date.substring(0, 4);
         list.add(p);
     }
 
@@ -482,9 +530,16 @@ final class Recs {
         JSONObject o = get("/" + p.kind + "/" + p.id
                 + "?language=" + lang() + "&append_to_response=watch/providers,images&include_image_language=null," + Ui.language.replaceAll("-.*", "") + ",en");
         p.title = title(p, o);
+        String ov = o.optString("overview", "");
+        if (!ov.isEmpty()) p.overview = ov;
+        double vote = o.optDouble("vote_average", 0);
+        if (vote > 0) p.rating = String.format(Locale.US, "%.1f", vote);
+        String date = o.optString(p.kind.equals("movie") ? "release_date" : "first_air_date", "");
+        if (date.length() >= 4) p.year = date.substring(0, 4);
         String best = bestBackdrop(o.optJSONObject("images"));
         if (best != null) p.backdrop = best;
         List<String> parts = new ArrayList<>();
+        if (!p.year.isEmpty()) parts.add(p.year);
         JSONArray genres = o.optJSONArray("genres");
         if (p.kind.equals("tv")) parts.add(Ui.tr("Series"));
         if (genres != null && genres.length() > 0) {
@@ -522,11 +577,21 @@ final class Recs {
         String own = o.optString(field, p.title);
         String original = o.optString("original_language");
         String lang = Ui.language.replaceAll("-.*", "");   // TMDB's original_language has no country: "zh", not "zh-CN"
-        if (lang.equals("en") || own.isEmpty() || !own.equals(o.optString("original_" + field))
-                || lang.equals(original) || "en".equals(original)) return own;
+        boolean needEnglishTitle = !lang.equals("en") && !own.isEmpty() && own.equals(o.optString("original_" + field))
+                && !lang.equals(original) && !"en".equals(original);
+        boolean needEnglishOverview = !lang.equals("en") && o.optString("overview", "").isEmpty();
+        if (!needEnglishTitle && !needEnglishOverview) return own;
         try {
-            String english = get("/" + p.kind + "/" + p.id + "?language=en-US").optString(field);
-            return english.isEmpty() ? own : english;
+            JSONObject en = get("/" + p.kind + "/" + p.id + "?language=en-US");
+            if (needEnglishOverview) {
+                String enOv = en.optString("overview", "");
+                if (!enOv.isEmpty()) p.overview = enOv;
+            }
+            if (needEnglishTitle) {
+                String english = en.optString(field);
+                if (!english.isEmpty()) return english;
+            }
+            return own;
         } catch (Exception e) {
             return own;
         }
@@ -784,7 +849,9 @@ final class Recs {
             JSONArray a = new JSONArray();
             for (Pick p : picks) {
                 a.put(new JSONObject().put("id", p.id).put("kind", p.kind).put("title", p.title).put("backdrop", p.backdrop).put("link", p.link == null ? "" : p.link)
-                        .put("meta", p.meta).put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
+                        .put("meta", p.meta).put("overview", p.overview == null ? "" : p.overview)
+                        .put("rating", p.rating == null ? "" : p.rating).put("year", p.year == null ? "" : p.year)
+                        .put("app", p.app == null ? "" : p.app).put("pkg", p.pkg == null ? "" : p.pkg)
                         .put("detailed", p.detailed));
             }
             SharedPreferences.Editor e = cache.edit().putString("picks", a.toString()).putInt("period", period).putLong("listAt", listAt)
@@ -811,6 +878,9 @@ final class Recs {
             p.backdrop = o.optString("backdrop");
             p.link = o.optString("link").isEmpty() ? null : o.optString("link");
             p.meta = o.optString("meta");
+            p.overview = o.optString("overview");
+            p.rating = o.optString("rating");
+            p.year = o.optString("year");
             p.app = o.optString("app").isEmpty() ? null : o.optString("app");
             p.pkg = o.optString("pkg").isEmpty() ? null : o.optString("pkg");
             p.detailed = o.optBoolean("detailed");

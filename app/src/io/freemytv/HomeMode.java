@@ -170,11 +170,14 @@ final class HomeMode {
      * boot check and an update turn it back on.
      */
     static void ensureRemoteService(Context c, long delayMs) {
-        if (RemoteKeys.supported()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
+        if (!RemoteKeys.supported()) return;
+        if (FREE.equals(state(c).optString("mode")) && setRemoteServiceDirect(c, true)) return;
+        ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
     }
 
     static void ensureRemoteServiceNow(Context app) {
         if (!RemoteKeys.supported() || !FREE.equals(state(app).optString("mode"))) return;
+        if (setRemoteServiceDirect(app, true)) return;
         try (Adb adb = Adb.connect(app, 10_000, null)) {
             remoteService(app, adb, true);
         } catch (IOException e) {
@@ -185,8 +188,35 @@ final class HomeMode {
     private static final String REMOTE_SERVICE = PKG + "/" + PKG + ".RemoteKeyService";
     private static final Pattern SERVICE = Pattern.compile("[\\w.]+/[\\w.$]+");
 
+    /** Enables or disables RemoteKeyService directly when WRITE_SECURE_SETTINGS has been granted (works even when port 5555 is off). */
+    private static boolean setRemoteServiceDirect(Context c, boolean on) {
+        try {
+            android.content.ContentResolver cr = c.getContentResolver();
+            String current = android.provider.Settings.Secure.getString(cr, "enabled_accessibility_services");
+            if (current == null || current.equals("null")) current = "";
+            List<String> others = new ArrayList<>();
+            for (String one : current.split(":")) {
+                if (one.isEmpty() || one.equals(REMOTE_SERVICE)) continue;
+                if (!SERVICE.matcher(one).matches()) return false;
+                others.add(one);
+            }
+            boolean enabled = "1".equals(android.provider.Settings.Secure.getString(cr, "accessibility_enabled"));
+            if (on == current.contains(REMOTE_SERVICE) && (!on || enabled)) return true;
+            List<String> list = new ArrayList<>(others);
+            if (on) list.add(REMOTE_SERVICE);
+            android.provider.Settings.Secure.putString(cr, "enabled_accessibility_services",
+                    list.isEmpty() ? null : String.join(":", list));
+            if (on) android.provider.Settings.Secure.putString(cr, "accessibility_enabled", "1");
+            AppLog.w("remote buttons service " + (on ? "on" : "off") + " (direct)");
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     /** Adds ours to the enabled accessibility services (keeping the others, like TalkBack), or takes it out. */
     private static void remoteService(Context c, Adb adb, boolean on) throws IOException {
+        adb.shell("pm grant " + PKG + " android.permission.WRITE_SECURE_SETTINGS");
         String current = adb.shell("settings get secure enabled_accessibility_services").trim();
         if (current.equals("null")) current = "";
         List<String> others = new ArrayList<>();

@@ -11,9 +11,30 @@ Open source. Built with Claude Code. One button to undo.
 
 [**freemytv.io**](https://freemytv.io) · [Install](#install) · [LG TVs](#lg-tvs-webos) · [Samsung TVs](#samsung-tvs-tizen) · [Any TV](#any-tv) · [Make it yours](#make-it-yours)
 
-<img src=".github/preview.webp" width="880" alt="The Free My TV home screen: a glass shelf of apps, trending picks, and a drawer with the weather and crypto prices">
-
 </div>
+
+## ✨ Midnight-Violet Bento Edition (`amansachdev/free-my-tv`)
+
+This fork enhances the Google TV experience with a redesigned **Midnight-Violet Bento UI**, **3D Stacked Hero Deck**, **Expandable Detail Sheet Modal**, **built-in curated recommendations** (works out of the box even without a TMDB API key), and **SPPL / Realtek Google TV remote shortcut button mapping** (Netflix, Prime Video, YouTube, Disney+ / JioHotstar, YouTube Music).
+
+<p align="center">
+  <img src="screenshots/home-bento.png" width="880" alt="Midnight-Violet Bento Home Screen — App Grid Focused">
+</p>
+<p align="center">
+  <img src="screenshots/hero-stack.png" width="436" alt="3D Stacked Hero Pick Card Focused">
+  &nbsp;
+  <img src="screenshots/detail-modal.png" width="436" alt="Expandable Detail Sheet Modal">
+</p>
+
+### What's New in This Fork
+- **Midnight-Violet Bento App Grid:** 2-column Bento layout on the right with dark midnight-indigo cards, glowing brand accents, and automatic banner-to-transparent-logo lifting for custom TV apps (like JioHotstar, SonyLIV, and Google Play Store).
+- **3D Stacked Hero Deck (`Explore`, `Movies`, `Shows`):** Left-side 3D perspective card deck showing the service badge, star rating (`★ 8.3/10`), title, synopsis, and stacked background preview cards.
+- **Expandable Detail Sheet Modal:** Pressing `OK` on any Hero card opens a full detail modal with high-res artwork, full synopsis, rating, direct Watch button, and a bottom recommendation switcher row.
+- **Unified Bottom Status Bar:** Glowing orb indicator, live crypto ticker, weather + temperature pill, city & date, and large clock at the bottom of the screen.
+- **Zero-Config Curated Picks:** Built-in fallback catalog of trending movies & shows linked to your installed streaming apps so the Hero deck works immediately even before adding a `tmdb_key`.
+- **SPPL / Realtek & Bluetooth Voice Remote Shortcut Fix:** Full support for Realtek (`GTV_4K_RT51` / `SPPL`) OEM remote shortcut keycodes (`190` YouTube, `191` Netflix, `193` Disney+/JioHotstar, `195`/`189` Prime Video, `203` YouTube Music) and Bluetooth RCUs that report `SOURCE_JOYSTICK` alongside `SOURCE_KEYBOARD`.
+
+---
 
 ## What you get
 

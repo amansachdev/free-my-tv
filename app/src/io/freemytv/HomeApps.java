@@ -70,6 +70,7 @@ final class HomeApps {
         Bitmap logoDark;    // version for a light background (YouTube's white icon), if any
         float logoInk;      // fraction of the logo with ink (thin logos are drawn larger, with the same "weight")
         float logoScale = 1; // size tweak by eye (compact logos need more)
+        int brand = 0xFF5E4CE6; // brand accent color for Bento tiles
         boolean connected = true;
     }
 
@@ -84,6 +85,7 @@ final class HomeApps {
         {"youtube", "YouTube", "com.google.android.youtube.tv", "FF0033", "play", "1"},
         {"prime", "Prime Video", "com.amazon.amazonvideo.livingroom", "1A98FF", "tint", "0.96"},
         {"disney", "Disney+", "com.disney.disneyplus", "1838C8", "", "1"},
+        {"hotstar", "JioHotstar", "in.startv.hotstar", "1838C8", "", "1"},
         {"max", "Max", "com.wbd.stream", "6C3BE0", "", "1.32"},
         {"max", "HBO Max", "com.hbo.hbonow", "6C3BE0", "", "1.32"},
         {"appletv", "Apple TV", "com.apple.atve.androidtv.appletv", "B8BCC6", "", "1.1"},
@@ -97,7 +99,7 @@ final class HomeApps {
     static final int MAX_SHELF = 8;
     /** Live TV apps of some brands (the antenna's channels open through the standard Android request first). */
     static final String[] LIVE_TV_APPS = {"com.tcl.tv", "com.google.android.tv", "com.mediatek.wwtv.tvcenter", "com.sony.dtv.tvx",
-            "com.smartdevice.livetv", "com.mediatek.tv.oneworld.tvcenter"};
+            "com.smartdevice.livetv", "com.mediatek.tv.oneworld.tvcenter", "com.realtek.dtv", "com.realtek.tv"};
     /** Kept out of "All Apps" (only hidden, still installed). Add the ones your TV shows that you never use. */
     private static final Set<String> HIDDEN = new HashSet<>(java.util.Arrays.asList(
             "com.google.android.play.games",        // Google Play Games
@@ -136,15 +138,18 @@ final class HomeApps {
             it.kind = APP;
             it.pkg = pkg;
             if (d == null) {
-                // An app picked in Settings > Shelf that isn't in SHELF: its own name and TV art.
+                // An app picked in Settings > Shelf that isn't in SHELF: lift its logo onto a dark Bento card if possible.
                 it.key = pkg;
                 it.label = ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
-                it.tile = appTile(c, null, pkg, 0);
+                it.logo = shelfLogo(c, pkg, pkg, "", extract);
+                if (it.logo == null) it.tile = appTile(c, null, pkg, 0);
+                if (it.logo != null) it.logoInk = ink(it.logo);
             } else {
                 it.key = d[0];
                 it.label = d[1];
+                it.brand = 0xFF000000 | Integer.parseInt(d[3], 16);
                 it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
-                if (it.logo == null) it.tile = appTile(c, d[0], d[2], 0xFF000000 | Integer.parseInt(d[3], 16));
+                if (it.logo == null) it.tile = appTile(c, d[0], d[2], it.brand);
                 if (it.logo != null) it.logoInk = ink(it.logo);
                 it.logoDark = ownLogoCached(c, d[0] + "-dark");
                 it.logoScale = Float.parseFloat(d[5]);
@@ -617,8 +622,8 @@ final class HomeApps {
                 if (a <= 0.004f) continue;
                 for (int i = 0; i < 3; i++) col[i] = clamp((col[i] - (1 - a) * bg[i]) / a);   // no background halo
                 float l = lum(col), s = sat(col);
-                if (bgLum > 0.6f && l < 0.42f && s < 0.3f) {
-                    col[0] = col[1] = col[2] = 1f;                  // black text on a light background → white
+                if (bgLum > 0.6f && l < 0.56f && s < 0.3f) {
+                    col[0] = col[1] = col[2] = 1f;                  // black/gray text on a light background → white
                 } else if (tint && bgLum <= 0.6f && bgLum > 0.1f && bgSat > 0.35f && l > 0.7f && s < 0.25f) {
                     vivid(bg, col);                                 // white logo on brand color → that color, vivid
                 }
