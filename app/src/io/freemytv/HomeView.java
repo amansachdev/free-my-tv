@@ -154,10 +154,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     static {
         TILE_STYLE.put("netflix", new int[] {0xFF0A0A0A, 0xFF000000, 0});
         TILE_STYLE.put("youtube", new int[] {0xFF1C1C1E, 0xFF09090A, 0});
+        TILE_STYLE.put("smarttube", new int[] {0xFF28121E, 0xFF11080E, 0});
         TILE_STYLE.put("globoplay", new int[] {0xFFFF8A1F, 0xFFFF2D5A, 1});
         TILE_STYLE.put("prime", new int[] {0xFF13264E, 0xFF0A142D, 1});
         TILE_STYLE.put("disney", new int[] {0xFF173584, 0xFF08143F, 0});
         TILE_STYLE.put("hotstar", new int[] {0xFF1838C8, 0xFF0A1760, 0});
+        TILE_STYLE.put("jiocinema", new int[] {0xFF581C87, 0xFF2E1065, 0});
+        TILE_STYLE.put("sonyliv", new int[] {0xFF312E81, 0xFF1E1B4B, 0});
+        TILE_STYLE.put("cricfy", new int[] {0xFF431407, 0xFF1C0A04, 0});
+        TILE_STYLE.put("netmirror", new int[] {0xFF1F122B, 0xFF0D0814, 0});
+        TILE_STYLE.put("kciktv", new int[] {0xFF064E3B, 0xFF022C22, 0});
         TILE_STYLE.put("max", new int[] {0xFF5C30E8, 0xFF221684, 0});
         TILE_STYLE.put("appletv", new int[] {0xFF1C1C1E, 0xFF000000, 0});
     }
@@ -402,6 +408,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     // MARK: - Lifecycle (called by HomeActivity)
 
+    private boolean pendingAllApps, pendingInputs;
+
     void resume() {
         if (running) return;
         running = true;
@@ -419,13 +427,57 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         reload();
         updatePalette();
         updatePicks();
-        if (sheetOpen) closeSheet();
-        sheet.snap(sheet.target);
+        if (pendingAllApps) {
+            pendingAllApps = false;
+            openSheet();
+        } else if (pendingInputs) {
+            pendingInputs = false;
+            openInputsDrawerNow();
+        } else {
+            if (sheetOpen) closeSheet();
+            sheet.snap(sheet.target);
+        }
         motionDirty = true;
         invalidateAll();
         idle = false;
         Choreographer.getInstance().postFrameCallback(this);
         spoken.readAgain();
+    }
+
+    void openAllApps() {
+        wake();
+        reload();
+        if (!running) {
+            pendingAllApps = true;
+            return;
+        }
+        if (drawerOpen) closeDrawer();
+        openSheet();
+        motionDirty = true;
+        invalidateAll();
+    }
+
+    void openInputsDrawer() {
+        wake();
+        if (!running) {
+            pendingInputs = true;
+            return;
+        }
+        openInputsDrawerNow();
+    }
+
+    private void openInputsDrawerNow() {
+        if (sheetOpen) closeSheet();
+        openDrawer();
+        for (int i = 0; i < drawerItems.size(); i++) {
+            if (drawerItems.get(i).kind == HomeApps.INPUT) {
+                drawerIndex = i;
+                break;
+            }
+        }
+        retarget(false);
+        motionDirty = true;
+        invalidateAll();
     }
 
     void pause() {
@@ -1130,7 +1182,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         cancelReorder(true);    // the list changed under the move (an app installed or removed)
         tileShaders = new LinearGradient[0];
         boolean same = list.size() == shelf.size();
-        for (int i = 0; same && i < list.size(); i++) same = list.get(i).key.equals(shelf.get(i).key);
+        for (int i = 0; same && i < list.size(); i++) {
+            HomeApps.Item a = list.get(i), b = shelf.get(i);
+            same = a.key.equals(b.key) && (a.logo != null) == (b.logo != null) && (a.tile != null) == (b.tile != null);
+        }
         shelf = list;
         if (!same || tileFocus.length != list.size()) {
             tileFocus = new Spring[list.size()];
@@ -1151,19 +1206,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         platter.invalidate();
     }
 
-    /** Right-side 2-column Bento grid (x = 1068..1840, y = 156..866). */
+    /** Right-side 2-column Bento grid (x = 1068..1840, y = 156..866), up to 10 apps (5 rows × 2 columns). */
     private void layoutShelf() {
         int n = shelf.size();
         float left = 1068 * k, right = CONTENT_R * k, top = 156 * k, bottom = 866 * k;
-        float gap = 24 * k;
         int cols = 2, rows = Math.max(2, (n + 1) / 2);
-        float tw = (right - left - gap) / cols;
-        float th = (bottom - top - (rows - 1) * gap) / rows;
+        float gapX = 20 * k, gapY = (rows >= 5 ? 14 : rows == 4 ? 18 : 22) * k;
+        float tw = (right - left - gapX) / cols;
+        float th = (bottom - top - (rows - 1) * gapY) / rows;
         platterRect.set(MARGIN * k, 916 * k, right, 1036 * k);
         for (int i = 0; i < n; i++) {
             int col = i % cols, row = i / cols;
-            float x = left + col * (tw + gap);
-            float y = top + row * (th + gap);
+            float x = left + col * (tw + gapX);
+            float y = top + row * (th + gapY);
             tileRects[i].set(x, y, x + tw, y + th);
         }
         crispLogos.clear();
@@ -1333,10 +1388,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawShelfTile(Canvas c, int i) {
         HomeApps.Item it = shelf.get(i);
         float l = i == liftIndex ? Math.max(0, moveLift.value) : 0;
-        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + 0.07f * f + 0.05f * l;
+        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + 0.06f * f + 0.04f * l;
         RectF base = tileRects[i];
-        float bw = base.width(), bh = base.height(), r0 = 30 * k, rTL0 = 68 * k;
-        float cx = base.centerX(), cy = base.centerY() - 4 * k * fc;
+        float bw = base.width(), bh = base.height();
+        float r0 = Math.min(28 * k, bh * 0.24f), rTL0 = Math.min(54 * k, bh * 0.42f);
+        float cx = base.centerX(), cy = base.centerY() - 3 * k * fc;
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
         float r = r0 * s, rTL = rTL0 * s;
 
@@ -1344,7 +1400,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         c.translate(cx, cy);
         c.scale(s, s);
         tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-        tmp.offset(0, (6 + 14 * fc + 6 * l) * k);
+        tmp.offset(0, (5 + 10 * fc + 5 * l) * k);
         shadowDeep.setColor(Ui.alpha(0xFF000000, 0.36f + 0.32f * fc + 0.14f * Ui.clamp(l)));
         shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
         c.restore();
@@ -1409,13 +1465,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             lTip.setColor(blend(0xCCCFD4F0, 0xFFFFFFFF, fc));
             c.drawText(it.label, cx, cy + oy + bSize + 36 * k * s, lTip);
         } else if (it.logo != null) {
+            // Shift the logo slightly upward when focused so it sits close to the app label with no empty gap
+            float savedTop = cell.top, savedBot = cell.bottom;
+            float liftY = fc * Math.min(10 * k, bh * 0.08f);
+            cell.offset(0, -liftY);
             drawLogo(c, it, cell, s, style != null ? style[2] : 0);
+            cell.top = savedTop;
+            cell.bottom = savedBot;
         } else if (it.tile != null) {
             roundImage(c, it.tile, cell, r);
         }
         if (!"all".equals(it.key) && fc > 0.02f && it.label != null) {
             lTip.setColor(Ui.alpha(0xF2FFFFFF, fc));
-            c.drawText(it.label, cx, cell.bottom - 20 * k, lTip);
+            c.drawText(it.label, cx, cell.bottom - Math.min(14 * k, bh * 0.11f), lTip);
         }
     }
 
@@ -1472,13 +1534,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Bitmap crispLogo(HomeApps.Item it, boolean dark, boolean rest) {
         Bitmap src = dark ? it.logoDark : it.logo;
         if (tileRects.length == 0) return src;
-        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width()) + (rest ? "@rest" : "");
+        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width()) + "x" + Math.round(tileRects[0].height()) + (rest ? "@rest" : "");
         Bitmap cached = crispLogos.get(key);
         if (cached != null) return cached;
         float bw = tileRects[0].width() * (1 + FOCUS_GROW), bh = tileRects[0].height() * (1 + FOCUS_GROW);
         float lw = src.getWidth(), lh = src.getHeight();
-        float scale = (float) Math.sqrt(bw * bh * 0.085f / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
-        scale = Math.min(scale, Math.min(bw * 0.76f / lw, bh * 0.58f / lh));
+        float scale = (float) Math.sqrt(bw * bh * 0.115f / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
+        scale = Math.min(scale, Math.min(bw * 0.74f / lw, bh * 0.56f / lh));
         if (rest) scale /= 1 + FOCUS_GROW;
         Bitmap out = downscale(src, Math.round(lw * scale), Math.round(lh * scale));
         crispLogos.put(key, out);
@@ -2197,7 +2259,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 setShelf(s);
                 setStatusItems(st);
                 setDrawerItems(d);
-                if (!sheetOpen) setOthers(o);
+                setOthers(o);
             });
         });
     }
@@ -3273,11 +3335,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             Symbols.draw(getContext(), c, lightButtons.get(i).symbol, cell.centerX(), cell.centerY(), 26 * k * s,
                     blend(0xF2FFFFFF, 0xFF120D2B, f));
             if (f > 0.01f) {
+                // The name sits to the left of the button row, in the top bar's empty space (below the buttons it
+                // ran into the app tiles); it slides in slightly as it fades in.
                 String label = lightButtons.get(i).label;
                 float half = lTip.measureText(label) / 2;
-                float x = Math.min(r.centerX(), CONTENT_R * k - half);
+                float x = topRects[3].left - 26 * k - half + (1 - f) * 12 * k;
                 lTip.setAlpha(Math.round(255 * f));
-                c.drawText(label, x, r.bottom + (36 + 4 * f) * k, lTip);
+                c.drawText(label, x, topRects[3].centerY() + Ui.halfCap(lTip), lTip);
             }
         }
     }

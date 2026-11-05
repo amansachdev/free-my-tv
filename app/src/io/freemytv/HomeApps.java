@@ -83,9 +83,20 @@ final class HomeApps {
     private static final String[][] SHELF = {
         {"netflix", "Netflix", "com.netflix.ninja", "E50914", "", "1"},
         {"youtube", "YouTube", "com.google.android.youtube.tv", "FF0033", "play", "1"},
+        {"smarttube", "SmartTube", "org.smarttube.stable", "E11D48", "play", "1"},
+        {"smarttube", "SmartTube", "com.liskovsoft.smarttubetv.beta", "E11D48", "play", "1"},
         {"prime", "Prime Video", "com.amazon.amazonvideo.livingroom", "1A98FF", "tint", "0.96"},
         {"disney", "Disney+", "com.disney.disneyplus", "1838C8", "", "1"},
         {"hotstar", "JioHotstar", "in.startv.hotstar", "1838C8", "", "1"},
+        {"cricfy", "CRICFy TV", "app.cricfy.tv", "EA580C", "", "1"},
+        {"netmirror", "NetMirror", "app.netmirror.netmirror", "E50914", "", "1"},
+        {"jiocinema", "JioCinema", "com.jio.media.stb.ondemand", "D946EF", "", "1"},
+        {"sonyliv", "Sony LIV", "com.sonyliv", "4F46E5", "", "1"},
+        {"zee5", "ZEE5", "com.graymatrix.did", "7C3AED", "", "1"},
+        {"kciktv", "KCIKTV", "dev.xacnio.kciktv", "22C55E", "", "1"},
+        {"twitch", "Twitch", "com.fgl27.twitch", "9333EA", "", "1"},
+        {"crunchyroll", "Crunchyroll", "com.crunchyroll.crunchyroid", "F97316", "", "1"},
+        {"playstore", "Google Play Store", "com.android.vending", "2563EB", "", "1"},
         {"max", "Max", "com.wbd.stream", "6C3BE0", "", "1.32"},
         {"max", "HBO Max", "com.hbo.hbonow", "6C3BE0", "", "1.32"},
         {"appletv", "Apple TV", "com.apple.atve.androidtv.appletv", "B8BCC6", "", "1.1"},
@@ -96,7 +107,7 @@ final class HomeApps {
         {"globoplay", "Globoplay", "com.globo.globotv", "FF5A1F", "tint", "1"},
         {"spotify", "Spotify", "com.spotify.tv.android", "1DB954", "", "1"},
     };
-    static final int MAX_SHELF = 8;
+    static final int MAX_SHELF = 10;
     /** Live TV apps of some brands (the antenna's channels open through the standard Android request first). */
     static final String[] LIVE_TV_APPS = {"com.tcl.tv", "com.google.android.tv", "com.mediatek.wwtv.tvcenter", "com.sony.dtv.tvx",
             "com.smartdevice.livetv", "com.mediatek.tv.oneworld.tvcenter", "com.realtek.dtv", "com.realtek.tv"};
@@ -141,14 +152,14 @@ final class HomeApps {
                 // An app picked in Settings > Shelf that isn't in SHELF: lift its logo onto a dark Bento card if possible.
                 it.key = pkg;
                 it.label = ri != null ? String.valueOf(ri.loadLabel(pm)) : pkg;
-                it.logo = shelfLogo(c, pkg, pkg, "", extract);
+                it.logo = shelfLogo(c, pkg, pkg, it.label, "", extract);
                 if (it.logo == null) it.tile = appTile(c, null, pkg, 0);
                 if (it.logo != null) it.logoInk = ink(it.logo);
             } else {
                 it.key = d[0];
                 it.label = d[1];
                 it.brand = 0xFF000000 | Integer.parseInt(d[3], 16);
-                it.logo = shelfLogo(c, d[0], d[2], d[4], extract);
+                it.logo = shelfLogo(c, d[0], d[2], it.label, d[4], extract);
                 if (it.logo == null) it.tile = appTile(c, d[0], d[2], it.brand);
                 if (it.logo != null) it.logoInk = ink(it.logo);
                 it.logoDark = ownLogoCached(c, d[0] + "-dark");
@@ -167,10 +178,14 @@ final class HomeApps {
     /** The shelf's packages in order: the user's list (Settings > Shelf), or the built-in one. */
     static List<String> shelfPackages(Context c) {
         List<String> custom = Prefs.shelf();
-        if (custom != null) return custom;
-        List<String> out = new ArrayList<>();
+        if (custom != null && Prefs.shelfMigrated10()) return custom;
+        List<String> out = custom != null ? new ArrayList<>(custom) : new ArrayList<>();
         PackageManager pm = c.getPackageManager();
-        for (String[] d : SHELF) if (out.size() < MAX_SHELF && launchIntent(pm, d[2]) != null) out.add(d[2]);
+        for (String[] d : SHELF) {
+            if (out.size() >= MAX_SHELF) break;
+            if (!out.contains(d[2]) && launchIntent(pm, d[2]) != null) out.add(d[2]);
+        }
+        if (custom != null) Prefs.setShelf(out);
         return out;
     }
 
@@ -493,9 +508,9 @@ final class HomeApps {
     // MARK: - Colored logos (shelf)
 
     /** Bump when the way logos are lifted changes (the ones saved on disk are redone). */
-    private static final int LOGO_VERSION = 2;
+    private static final int LOGO_VERSION = 3;
 
-    private static Bitmap shelfLogo(Context c, String key, String pkg, String mode, boolean extract) {
+    private static Bitmap shelfLogo(Context c, String key, String pkg, String label, String mode, boolean extract) {
         synchronized (LOGOS) {
             if (LOGOS.containsKey(key)) return LOGOS.get(key);
         }
@@ -509,6 +524,7 @@ final class HomeApps {
                 return null;
             } else {
                 logo = bannerLogo(c, pkg, mode.equals("tint"), mode.equals("play"));
+                if (logo == null) logo = iconLockupLogo(c, pkg, label);
                 saveLogo(logo, file, none);
             }
         }
@@ -517,6 +533,61 @@ final class HomeApps {
             LOGOS.put(key, logo);
         }
         return logo;
+    }
+
+    /** Fallback horizontal lockup ([Rounded App Icon] + [Bold White Brand Title]) for apps without a clean TV banner logo. */
+    private static Bitmap iconLockupLogo(Context c, String pkg, String label) {
+        Drawable icon = null;
+        try {
+            PackageManager pm = c.getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+            if (ai.icon != 0) {
+                try {
+                    icon = pm.getResourcesForApplication(ai).getDrawableForDensity(ai.icon, DisplayMetrics.DENSITY_XXXHIGH, null);
+                } catch (PackageManager.NameNotFoundException | RuntimeException ignored) {
+                }
+            }
+            if (icon == null) icon = pm.getApplicationIcon(ai);
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
+        if (icon == null) return null;
+        String text = label != null && !label.isEmpty() ? label : pkg;
+        Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+        tp.setColor(0xFFFFFFFF);
+        tp.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD));
+        tp.setTextSize(64f);
+        int iconSize = 112, gap = 26;
+        int textW = Math.max(1, Math.round(tp.measureText(text)));
+        int w = iconSize + gap + textW + 16, h = 140;
+        Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(b);
+        float left = 4f, top = (h - iconSize) / 2f;
+        if (icon instanceof AdaptiveIconDrawable) {
+            AdaptiveIconDrawable a = (AdaptiveIconDrawable) icon;
+            Path clip = new Path();
+            clip.addRoundRect(new RectF(left, top, left + iconSize, top + iconSize), iconSize * 0.2237f, iconSize * 0.2237f, Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(clip);
+            int pad = iconSize / 4;
+            for (Drawable layer : new Drawable[] {a.getBackground(), a.getForeground()}) {
+                if (layer == null) continue;
+                layer.setBounds(Math.round(left) - pad, Math.round(top) - pad, Math.round(left) + iconSize + pad, Math.round(top) + iconSize + pad);
+                layer.draw(canvas);
+            }
+            canvas.restore();
+        } else {
+            Path clip = new Path();
+            clip.addRoundRect(new RectF(left, top, left + iconSize, top + iconSize), iconSize * 0.2237f, iconSize * 0.2237f, Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(clip);
+            icon.setBounds(Math.round(left), Math.round(top), Math.round(left) + iconSize, Math.round(top) + iconSize);
+            icon.draw(canvas);
+            canvas.restore();
+        }
+        Paint.FontMetrics fm = tp.getFontMetrics();
+        float ty = h / 2f - (fm.ascent + fm.descent) / 2f;
+        canvas.drawText(text, left + iconSize + gap, ty, tp);
+        return trimLogo(b);
     }
 
     /** File for the logo lifted from the TV art: it changes when the app is updated (the art may have changed). */

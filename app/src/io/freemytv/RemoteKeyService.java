@@ -13,7 +13,15 @@ public class RemoteKeyService extends AccessibilityService {
         return RemoteKeys.onKey(this, event);
     }
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) {}
+    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        CharSequence pkg = event.getPackageName(), cls = event.getClassName();
+        if (pkg != null && cls != null
+                && "com.google.android.apps.tv.launcherx".contentEquals(pkg)
+                && cls.toString().contains("HomeActivity")) {
+            RemoteKeys.openHome(this);
+        }
+    }
 
     @Override public void onInterrupt() {}
 }

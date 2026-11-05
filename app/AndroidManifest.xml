@@ -16,9 +16,21 @@
     <queries>
         <package android:name="com.netflix.ninja" />
         <package android:name="com.google.android.youtube.tv" />
+        <package android:name="org.smarttube.stable" />
+        <package android:name="com.liskovsoft.smarttubetv.beta" />
         <package android:name="com.amazon.amazonvideo.livingroom" />
         <package android:name="com.disney.disneyplus" />
         <package android:name="in.startv.hotstar" />
+        <package android:name="com.jio.media.stb.ondemand" />
+        <package android:name="com.sonyliv" />
+        <package android:name="com.graymatrix.did" />
+        <package android:name="app.cricfy.tv" />
+        <package android:name="app.netmirror.netmirror" />
+        <package android:name="com.arezoonazer.androidvideoplayer" />
+        <package android:name="dev.xacnio.kciktv" />
+        <package android:name="com.fgl27.twitch" />
+        <package android:name="com.crunchyroll.crunchyroid" />
+        <package android:name="com.android.vending" />
         <package android:name="com.wbd.stream" />
         <package android:name="com.hbo.hbonow" />
         <package android:name="com.apple.atve.androidtv.appletv" />
@@ -95,7 +107,7 @@
             android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
             android:theme="@style/FreeMyTV.Home">
-            <intent-filter>
+            <intent-filter android:priority="100">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />

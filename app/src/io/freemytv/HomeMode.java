@@ -287,6 +287,9 @@ final class HomeMode {
             }
             busy(c, Ui.tr("Switching the home screen and screensaver…"));
             Watchdog.clear(c);
+            if (RemoteKeys.SPPL) {
+                adb.shell("pm enable " + packageOf(GOOGLE_HOME));
+            }
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("Android didn't accept the new home screen"));
             adb.shell("settings put secure screensaver_components " + DREAM);
@@ -295,6 +298,7 @@ final class HomeMode {
             save(c, started);
             List<String> targets = targets(home, dream, setupHome);
             Set<String> disabled = new HashSet<>(stringList(state(c), "disabled"));
+            if (RemoteKeys.SPPL) disabled.remove(packageOf(GOOGLE_HOME));
             Set<String> present = packages(adb, "");
             Set<String> keptOff = new HashSet<>(stringList(state(c), "keptOff"));
             // Off now and not on our list: the person turned it off, unless an earlier install of Free My TV did (its
@@ -338,7 +342,7 @@ final class HomeMode {
             busy(c, Ui.tr("Measuring Free My TV…"));
             measureHomeTime(c, adb, FREE);
             done(c, null);
-            adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME");
+            adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME -n " + HOME_ACTIVITY);
             ModeJob.schedule(c, ModeJob.MEMORY, FREE, 120_000);
         } catch (Exception e) {
             done(c, Ui.trf("Couldn't turn on Free My TV: {error}", "error", e.getMessage()));
@@ -500,6 +504,7 @@ final class HomeMode {
                 boolean reverted = s.optBoolean("homeReverted");
                 String home = originalHome(s);
                 Set<String> wanted = new HashSet<>(stringList(s, "disabled"));
+                if (RemoteKeys.SPPL) wanted.remove(packageOf(GOOGLE_HOME));
                 String dream = originalDream(s);
                 for (String pkg : targets(home, dream, s.optBoolean("setupHome", true))) {
                     if (!reverted || !(pkg.equals(packageOf(home)) || pkg.equals(GOOGLE_SETUP) || pkg.equals(packageOf(dream)))) {
@@ -507,6 +512,13 @@ final class HomeMode {
                     }
                 }
                 Set<String> disabled = new HashSet<>(stringList(s, "disabled"));
+                if (RemoteKeys.SPPL) {
+                    disabled.remove(packageOf(GOOGLE_HOME));
+                    if (disabledNow.contains(packageOf(GOOGLE_HOME))) {
+                        adb.shell("pm enable " + packageOf(GOOGLE_HOME));
+                    }
+                    adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
+                }
                 // Off before Free My TV: turned off again if a TV update brings one back, but never handed to
                 // Original to turn on.
                 List<String> keptOff = stringList(s, "keptOff");
@@ -524,6 +536,15 @@ final class HomeMode {
                 if (!reverted && !homeHolder(adb).contains(PKG)) {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("the home screen"));
+                }
+                if (!reverted && RemoteKeys.supported()) {
+                    try {
+                        remoteService(app, adb, true);
+                    } catch (IOException ignored) {
+                    }
+                }
+                if (!reverted && RemoteKeys.SPPL) {
+                    adb.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME -n " + HOME_ACTIVITY);
                 }
                 // Whole component names: ".ScreensaverAlone" (Android 11) contains ".Screensaver" (12 and newer).
                 if (!reverted && !Arrays.asList(adb.shell("settings get secure screensaver_components").trim().split(",")).contains(DREAM)) {
@@ -554,7 +575,12 @@ final class HomeMode {
     private static List<String> targets(String home, String dream, boolean setupHome) {
         List<String> out = new ArrayList<>();
         String homePkg = packageOf(home);
-        if (homePkg != null && !homePkg.equals(PKG)) out.add(homePkg);
+        // Keep Google TV LauncherX enabled on SPPL/Realtek TVs so its side Dashboard / Notification Panel
+        // (DashboardHandler) continues to open when the Settings remote button is pressed; HomeActivity's
+        // higher intent-filter priority and set-home-activity keep Free My TV as the active Home screen.
+        if (homePkg != null && !homePkg.equals(PKG) && !(RemoteKeys.SPPL && homePkg.equals(packageOf(GOOGLE_HOME)))) {
+            out.add(homePkg);
+        }
         if (TV_LAUNCHER.equals(homePkg)) out.add(TV_RECOMMENDATIONS);
         if (setupHome) out.add(GOOGLE_SETUP);
         String dreamPkg = packageOf(dream);

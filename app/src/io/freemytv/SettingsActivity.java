@@ -687,7 +687,7 @@ public class SettingsActivity extends Activity {
                     Ui.tr("Prime Video button"), Ui.tr("YouTube button"),
                     Ui.tr("Crunchyroll button"), Ui.tr("Google Play button")};
             if (RemoteKeys.SPPL) return new String[] {Ui.tr("Netflix button"), Ui.tr("YouTube button"),
-                    Ui.tr("Prime Video button"), Ui.tr("Disney+ button")};
+                    Ui.tr("Prime Video button"), Ui.tr("All Apps button")};
             return new String[] {Ui.tr("Netflix button"), Ui.tr("YouTube button"),
                     Ui.tr("Prime Video button"), Ui.tr("TCL Channel button")};
         }
@@ -695,8 +695,13 @@ public class SettingsActivity extends Activity {
         private String[] keyValues() {
             String[] v = new String[Prefs.KEYS.length];
             for (int i = 0; i < v.length; i++) {
-                int at = appPkgs.indexOf(Prefs.keyApp(Prefs.KEYS[i]));
-                v[i] = at >= 0 ? appLabels.get(at) : Ui.tr("Not installed");
+                String pkg = Prefs.keyApp(Prefs.KEYS[i]);
+                if (RemoteKeys.SPPL && Prefs.KEYS[i] == Prefs.KEY_TCL_CHANNEL && pkg.isEmpty()) {
+                    v[i] = Ui.tr("All Apps");
+                } else {
+                    int at = appPkgs.indexOf(pkg);
+                    v[i] = at >= 0 ? appLabels.get(at) : Ui.tr("Not installed");
+                }
             }
             return v;
         }
@@ -849,12 +854,18 @@ public class SettingsActivity extends Activity {
             Prefs.setShelf(shelfOrder);
         }
 
-        /** OK: puts the app on the shelf (at the end) or takes it off. */
+        /** OK: puts the app on the shelf (at the end, replacing #10 if already full) or takes it off. */
         private void toggleShelfApp() {
             String pkg = shelfRows.get(pickScroll + focus)[0];
-            if (shelfOrder.contains(pkg)) shelfOrder.remove(pkg);
-            else if (shelfOrder.size() < HomeApps.MAX_SHELF) shelfOrder.add(pkg);
-            else return;
+            if (shelfOrder.contains(pkg)) {
+                shelfOrder.remove(pkg);
+            } else if (shelfOrder.size() < HomeApps.MAX_SHELF) {
+                shelfOrder.add(pkg);
+            } else if (!shelfOrder.isEmpty()) {
+                shelfOrder.set(shelfOrder.size() - 1, pkg);
+            } else {
+                return;
+            }
             refreshShelfRows(pkg);
         }
 

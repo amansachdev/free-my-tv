@@ -136,7 +136,12 @@ final class Prefs {
     static void setShelf(List<String> packages) {
         StringBuilder sb = new StringBuilder();
         for (String p : packages) sb.append(sb.length() == 0 ? "" : ",").append(p);
-        put("shelf", sb.toString());
+        sp().edit().putString("shelf", sb.toString()).putBoolean("shelf_v10", true).apply();
+        version++;
+    }
+
+    static boolean shelfMigrated10() {
+        return sp().getBoolean("shelf_v10", false);
     }
 
     // MARK: - Remote buttons
@@ -146,7 +151,7 @@ final class Prefs {
             case KEY_NETFLIX: case KEY_STEM_NETFLIX: return "com.netflix.ninja";
             case KEY_YOUTUBE: return "com.google.android.youtube.tv";
             case KEY_PRIME: return "com.amazon.amazonvideo.livingroom";
-            case KEY_TCL_CHANNEL: return RemoteKeys.SPPL ? "in.startv.hotstar" : "";
+            case KEY_TCL_CHANNEL: return "";
             default: return "";
         }
     }
