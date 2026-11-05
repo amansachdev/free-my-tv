@@ -37,6 +37,7 @@ public class HomeActivity extends Activity {
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
+        handleIntent(getIntent(), false);
     }
 
     @Override protected void onResume() {
@@ -59,7 +60,25 @@ public class HomeActivity extends Activity {
     /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (home != null) home.reset(true);
+        setIntent(intent);
+        if (home != null && !handleIntent(intent, true)) {
+            home.reset(true);
+        }
+    }
+
+    private boolean handleIntent(Intent intent, boolean fromNewIntent) {
+        if (intent == null || home == null) return false;
+        if (intent.getBooleanExtra("open_all_apps", false)) {
+            intent.removeExtra("open_all_apps");
+            home.openAllApps();
+            return true;
+        }
+        if (intent.getBooleanExtra("open_inputs", false)) {
+            intent.removeExtra("open_inputs");
+            home.openInputsDrawer();
+            return true;
+        }
+        return false;
     }
 
     @Override protected void onDestroy() {
